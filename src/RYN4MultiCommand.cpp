@@ -27,11 +27,11 @@
 ryn4::RelayErrorCode RYN4::setMultipleRelayCommands(const std::array<RelayCommandSpec, 8>& commands) {
     RYN4_TIME_START();
 
-    RYN4_LOG_D(tag, "setMultipleRelayCommands called with mixed command types");
+    RYN4_LOG_D("setMultipleRelayCommands called with mixed command types");
 
     // Check if module is offline
     if (statusFlags.moduleOffline) {
-        RYN4_LOG_E(tag, "Module is offline - cannot execute multi-command");
+        RYN4_LOG_E("Module is offline - cannot execute multi-command");
         return RelayErrorCode::MODBUS_ERROR;
     }
 
@@ -39,7 +39,7 @@ ryn4::RelayErrorCode RYN4::setMultipleRelayCommands(const std::array<RelayComman
     std::vector<uint16_t> data(NUM_RELAYS);
 
     RYN4_DEBUG_ONLY(
-        RYN4_LOG_D(tag, "Preparing multi-command batch:");
+        RYN4_LOG_D("Preparing multi-command batch:");
     );
 
     for (size_t i = 0; i < NUM_RELAYS; i++) {
@@ -48,45 +48,45 @@ ryn4::RelayErrorCode RYN4::setMultipleRelayCommands(const std::array<RelayComman
         switch (commands[i].action) {
             case RelayAction::OPEN:
                 commandValue = ryn4::hardware::CMD_OPEN;  // 0x0100
-                RYN4_LOG_D(tag, "  Relay %d: OPEN (0x%04X)", i+1, commandValue);
+                RYN4_LOG_D("  Relay %d: OPEN (0x%04X)", i+1, commandValue);
                 break;
 
             case RelayAction::CLOSE:
                 commandValue = ryn4::hardware::CMD_CLOSE;  // 0x0200
-                RYN4_LOG_D(tag, "  Relay %d: CLOSE (0x%04X)", i+1, commandValue);
+                RYN4_LOG_D("  Relay %d: CLOSE (0x%04X)", i+1, commandValue);
                 break;
 
             case RelayAction::TOGGLE:
                 commandValue = ryn4::hardware::CMD_TOGGLE;  // 0x0300
-                RYN4_LOG_D(tag, "  Relay %d: TOGGLE (0x%04X)", i+1, commandValue);
+                RYN4_LOG_D("  Relay %d: TOGGLE (0x%04X)", i+1, commandValue);
                 break;
 
             case RelayAction::LATCH:
                 commandValue = ryn4::hardware::CMD_LATCH;  // 0x0400
-                RYN4_LOG_D(tag, "  Relay %d: LATCH (0x%04X)", i+1, commandValue);
+                RYN4_LOG_D("  Relay %d: LATCH (0x%04X)", i+1, commandValue);
                 break;
 
             case RelayAction::MOMENTARY:
                 commandValue = ryn4::hardware::CMD_MOMENTARY;  // 0x0500
-                RYN4_LOG_D(tag, "  Relay %d: MOMENTARY (0x%04X)", i+1, commandValue);
+                RYN4_LOG_D("  Relay %d: MOMENTARY (0x%04X)", i+1, commandValue);
                 break;
 
             case RelayAction::DELAY:
                 commandValue = ryn4::hardware::makeDelayCommand(commands[i].delaySeconds);
-                RYN4_LOG_D(tag, "  Relay %d: DELAY %ds (0x%04X)",
+                RYN4_LOG_D("  Relay %d: DELAY %ds (0x%04X)",
                            i+1, commands[i].delaySeconds, commandValue);
                 break;
 
             case RelayAction::OPEN_ALL:
             case RelayAction::CLOSE_ALL:
                 // These are broadcast commands, not valid in multi-command
-                RYN4_LOG_W(tag, "  Relay %d: OPEN_ALL/CLOSE_ALL not valid in multi-command, using CLOSE",
+                RYN4_LOG_W("  Relay %d: OPEN_ALL/CLOSE_ALL not valid in multi-command, using CLOSE",
                            i+1);
                 commandValue = ryn4::hardware::CMD_CLOSE;
                 break;
 
             default:
-                RYN4_LOG_W(tag, "  Relay %d: Unknown action %d, using CLOSE",
+                RYN4_LOG_W("  Relay %d: Unknown action %d, using CLOSE",
                            i+1, static_cast<int>(commands[i].action));
                 commandValue = ryn4::hardware::CMD_CLOSE;
                 break;
@@ -100,7 +100,7 @@ ryn4::RelayErrorCode RYN4::setMultipleRelayCommands(const std::array<RelayComman
 
     // Execute with retry
     auto result = retryPolicy.execute<bool>([&]() {
-        RYN4_LOG_D(tag, "Sending multi-command batch (FC 0x10)");
+        RYN4_LOG_D("Sending multi-command batch (FC 0x10)");
 
         // writeMultipleRegisters handles mutex internally
         auto writeResult = writeMultipleRegisters(
@@ -109,24 +109,24 @@ ryn4::RelayErrorCode RYN4::setMultipleRelayCommands(const std::array<RelayComman
         );
 
         if (!writeResult.isOk()) {
-            RYN4_LOG_D(tag, "Multi-command write failed: %d",
+            RYN4_LOG_D("Multi-command write failed: %d",
                        static_cast<int>(writeResult.error()));
         }
         return writeResult.isOk();
     });
 
     if (result.attemptsMade > 1) {
-        RYN4_LOG_I(tag, "Multi-command succeeded after %d attempts (delay: %lu ms)",
+        RYN4_LOG_I("Multi-command succeeded after %d attempts (delay: %lu ms)",
                    result.attemptsMade, result.totalDelayMs);
     }
 
     if (!result.success) {
-        RYN4_LOG_E(tag, "Multi-command failed after %d attempts", result.attemptsMade);
+        RYN4_LOG_E("Multi-command failed after %d attempts", result.attemptsMade);
         RYN4_TIME_END("setMultipleRelayCommands");
         return RelayErrorCode::MODBUS_ERROR;
     }
 
-    RYN4_LOG_I(tag, "Multi-command batch sent successfully");
+    RYN4_LOG_I("Multi-command batch sent successfully");
 
     // Note: State updates will come from hardware response
     // For DELAY/MOMENTARY, states change asynchronously

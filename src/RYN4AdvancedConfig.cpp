@@ -20,7 +20,7 @@
  * @brief Read complete device identification and configuration
  */
 ryn4::RelayResult<RYN4::DeviceInfo> RYN4::readDeviceInfo() {
-    RYN4_LOG_D(tag, "Reading device information...");
+    RYN4_LOG_D("Reading device information...");
 
     DeviceInfo info = {};
 
@@ -28,7 +28,7 @@ ryn4::RelayResult<RYN4::DeviceInfo> RYN4::readDeviceInfo() {
     auto deviceIdResult = readHoldingRegisters(ryn4::hardware::REG_DEVICE_TYPE, 3);
 
     if (deviceIdResult.isError() || deviceIdResult.value().size() < 3) {
-        RYN4_LOG_E(tag, "Failed to read device identification");
+        RYN4_LOG_E("Failed to read device identification");
         return ryn4::RelayResult<DeviceInfo>(ryn4::RelayErrorCode::MODBUS_ERROR);
     }
 
@@ -37,14 +37,14 @@ ryn4::RelayResult<RYN4::DeviceInfo> RYN4::readDeviceInfo() {
     info.firmwareMajor = static_cast<uint8_t>(deviceIdData[1] & 0xFF);
     info.firmwareMinor = static_cast<uint8_t>(deviceIdData[2] & 0xFF);
 
-    RYN4_LOG_D(tag, "Device Type: 0x%04X, Firmware: v%d.%d",
+    RYN4_LOG_D("Device Type: 0x%04X, Firmware: v%d.%d",
                info.deviceType, info.firmwareMajor, info.firmwareMinor);
 
     // Read configuration registers (0x00FC-0x00FF: Reply Delay, Address, Baud, Parity)
     auto configResult = readHoldingRegisters(ryn4::hardware::REG_REPLY_DELAY, 4);
 
     if (configResult.isError() || configResult.value().size() < 4) {
-        RYN4_LOG_E(tag, "Failed to read configuration registers");
+        RYN4_LOG_E("Failed to read configuration registers");
         return ryn4::RelayResult<DeviceInfo>(ryn4::RelayErrorCode::MODBUS_ERROR);
     }
 
@@ -61,7 +61,7 @@ ryn4::RelayResult<RYN4::DeviceInfo> RYN4::readDeviceInfo() {
 
     info.configuredParity = static_cast<uint8_t>(configData[3] & 0xFF);
 
-    RYN4_LOG_I(tag, "Config: Address=%d, Baud=%lu, Parity=%d, Delay=%dms",
+    RYN4_LOG_I("Config: Address=%d, Baud=%lu, Parity=%d, Delay=%dms",
                info.configuredAddress, info.configuredBaudRate,
                info.configuredParity, info.replyDelayMs);
 
@@ -72,7 +72,7 @@ ryn4::RelayResult<RYN4::DeviceInfo> RYN4::readDeviceInfo() {
  * @brief Verify hardware configuration matches software expectations
  */
 ryn4::RelayResult<bool> RYN4::verifyHardwareConfig() {
-    RYN4_LOG_D(tag, "Verifying hardware configuration...");
+    RYN4_LOG_D("Verifying hardware configuration...");
 
     auto infoResult = readDeviceInfo();
     if (infoResult.isError()) {
@@ -84,7 +84,7 @@ ryn4::RelayResult<bool> RYN4::verifyHardwareConfig() {
 
     // Check slave ID
     if (info.configuredAddress != _slaveID) {
-        RYN4_LOG_W(tag, "Slave ID mismatch: DIP switches=%d, software=%d",
+        RYN4_LOG_W("Slave ID mismatch: DIP switches=%d, software=%d",
                    info.configuredAddress, _slaveID);
         configMatches = false;
     }
@@ -93,9 +93,9 @@ ryn4::RelayResult<bool> RYN4::verifyHardwareConfig() {
     // but the user can check it from the DeviceInfo structure
 
     if (configMatches) {
-        RYN4_LOG_I(tag, "Hardware configuration verified ✓");
+        RYN4_LOG_I("Hardware configuration verified");
     } else {
-        RYN4_LOG_W(tag, "Hardware configuration mismatch detected!");
+        RYN4_LOG_W("Hardware configuration mismatch detected!");
     }
 
     return ryn4::RelayResult<bool>(configMatches);
@@ -107,17 +107,17 @@ ryn4::RelayResult<bool> RYN4::verifyHardwareConfig() {
  * @param updateCache If true, updates internal relay state cache and sets event bits
  */
 ryn4::RelayResult<uint16_t> RYN4::readBitmapStatus(bool updateCache) {
-    RYN4_LOG_D(tag, "Reading relay status bitmap%s...", updateCache ? " (updating cache)" : "");
+    RYN4_LOG_D("Reading relay status bitmap%s...", updateCache ? " (updating cache)" : "");
 
     auto bitmapResult = readHoldingRegisters(ryn4::hardware::REG_STATUS_BITMAP, 1);
 
     if (bitmapResult.isError() || bitmapResult.value().empty()) {
-        RYN4_LOG_E(tag, "Failed to read status bitmap");
+        RYN4_LOG_E("Failed to read status bitmap");
         return ryn4::RelayResult<uint16_t>(ryn4::RelayErrorCode::MODBUS_ERROR);
     }
 
     uint16_t bitmap = bitmapResult.value()[0];
-    RYN4_LOG_D(tag, "Status bitmap: 0x%04X", bitmap);
+    RYN4_LOG_D("Status bitmap: 0x%04X", bitmap);
 
     // Update internal state cache if requested (for verification)
     if (updateCache) {
@@ -133,13 +133,13 @@ ryn4::RelayResult<uint16_t> RYN4::readBitmapStatus(bool updateCache) {
 
                 if (previousState != state) {
                     setUpdateEventBits(ryn4::RELAY_UPDATE_BITS[i]);
-                    RYN4_LOG_I(tag, "Relay %d state: %s", i + 1, state ? "ON" : "OFF");
+                    RYN4_LOG_I("Relay %d state changed: %s", i + 1, state ? "ON" : "OFF");
                 }
             }
             // Signal that relay config/status has been read successfully
             setInitializationBit(InitBits::RELAY_CONFIG);
         } else {
-            RYN4_LOG_E(tag, "Failed to acquire mutex for cache update");
+            RYN4_LOG_E("Failed to acquire mutex for cache update");
         }
     }
 
@@ -147,7 +147,7 @@ ryn4::RelayResult<uint16_t> RYN4::readBitmapStatus(bool updateCache) {
 #ifdef RYN4_DEBUG
     for (int i = 0; i < 8; i++) {
         bool relayOn = (bitmap >> i) & 0x01;
-        RYN4_LOG_V(tag, "  Relay %d: %s", i+1, relayOn ? "ON" : "OFF");
+        RYN4_LOG_V("  Relay %d: %s", i+1, relayOn ? "ON" : "OFF");
     }
 #endif
 
@@ -158,19 +158,19 @@ ryn4::RelayResult<uint16_t> RYN4::readBitmapStatus(bool updateCache) {
  * @brief Perform software factory reset
  */
 ryn4::RelayResult<void> RYN4::factoryReset() {
-    RYN4_LOG_W(tag, "Performing factory reset...");
+    RYN4_LOG_W("Performing factory reset...");
 
     // Write 0x0000 to factory reset register (0x00FB)
     auto resetResult = writeSingleRegister(ryn4::hardware::REG_FACTORY_RESET, 0x0000);
 
     if (resetResult.isError()) {
-        RYN4_LOG_E(tag, "Factory reset command failed");
+        RYN4_LOG_E("Factory reset command failed");
         return ryn4::RelayResult<void>(ryn4::RelayErrorCode::MODBUS_ERROR);
     }
 
-    RYN4_LOG_W(tag, "Factory reset command sent - POWER CYCLE module to complete reset");
-    RYN4_LOG_I(tag, "Reset will clear: Reply delay, Parity");
-    RYN4_LOG_I(tag, "Reset will NOT clear: Slave ID (DIP), Baud rate (DIP)");
+    RYN4_LOG_W("Factory reset command sent - POWER CYCLE module to complete reset");
+    RYN4_LOG_I("Reset will clear: Reply delay, Parity");
+    RYN4_LOG_I("Reset will NOT clear: Slave ID (DIP), Baud rate (DIP)");
 
     return ryn4::RelayResult<void>(ryn4::RelayErrorCode::SUCCESS);
 }
@@ -179,18 +179,18 @@ ryn4::RelayResult<void> RYN4::factoryReset() {
  * @brief Get current reply delay setting
  */
 ryn4::RelayResult<uint16_t> RYN4::getReplyDelay() {
-    RYN4_LOG_D(tag, "Reading reply delay...");
+    RYN4_LOG_D("Reading reply delay...");
 
     auto delayResult = readHoldingRegisters(ryn4::hardware::REG_REPLY_DELAY, 1);
 
     if (delayResult.isError() || delayResult.value().empty()) {
-        RYN4_LOG_E(tag, "Failed to read reply delay");
+        RYN4_LOG_E("Failed to read reply delay");
         return ryn4::RelayResult<uint16_t>(ryn4::RelayErrorCode::MODBUS_ERROR);
     }
 
     uint16_t delayReg = delayResult.value()[0];
     uint16_t delayMs = ryn4::hardware::replyDelayToMs(delayReg);
-    RYN4_LOG_D(tag, "Reply delay: %dms (register value: %d)", delayMs, delayReg);
+    RYN4_LOG_D("Reply delay: %dms (register value: %d)", delayMs, delayReg);
 
     return ryn4::RelayResult<uint16_t>(delayMs);
 }
@@ -199,29 +199,29 @@ ryn4::RelayResult<uint16_t> RYN4::getReplyDelay() {
  * @brief Set reply delay
  */
 ryn4::RelayResult<void> RYN4::setReplyDelay(uint16_t delayMs) {
-    RYN4_LOG_I(tag, "Setting reply delay to %dms...", delayMs);
+    RYN4_LOG_I("Setting reply delay to %dms...", delayMs);
 
     // Validate and convert to register value
     if (delayMs > 1000) {
-        RYN4_LOG_W(tag, "Delay %dms exceeds max 1000ms, will reset to 0ms on power-up", delayMs);
+        RYN4_LOG_W("Delay %dms exceeds max 1000ms, will reset to 0ms on power-up", delayMs);
     }
 
     uint16_t regValue = ryn4::hardware::msToReplyDelay(delayMs);
     uint16_t actualDelayMs = ryn4::hardware::replyDelayToMs(regValue);
 
     if (actualDelayMs != delayMs) {
-        RYN4_LOG_D(tag, "Delay rounded from %dms to %dms (40ms increments)", delayMs, actualDelayMs);
+        RYN4_LOG_D("Delay rounded from %dms to %dms (40ms increments)", delayMs, actualDelayMs);
     }
 
     // Write to register 0x00FC
     auto writeResult = writeSingleRegister(ryn4::hardware::REG_REPLY_DELAY, regValue);
 
     if (writeResult.isError()) {
-        RYN4_LOG_E(tag, "Failed to set reply delay");
+        RYN4_LOG_E("Failed to set reply delay");
         return ryn4::RelayResult<void>(ryn4::RelayErrorCode::MODBUS_ERROR);
     }
 
-    RYN4_LOG_I(tag, "Reply delay set to %dms (register value: %d)", actualDelayMs, regValue);
+    RYN4_LOG_I("Reply delay set to %dms (register value: %d)", actualDelayMs, regValue);
 
     return ryn4::RelayResult<void>(ryn4::RelayErrorCode::SUCCESS);
 }
