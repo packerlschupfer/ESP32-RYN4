@@ -354,21 +354,24 @@ public:
      * @brief Read all relay states as a bitmap
      *
      * Reads register 0x0080 which contains all 8 relay states as bits.
-     * More efficient than reading individual relay registers.
+     * More efficient than reading individual relay registers (2 bytes vs 16 bytes).
      *
+     * @param updateCache If true, updates internal relay state cache and event bits
      * @return RelayResult<uint16_t> with bitmap (bit 0 = relay 1, bit 7 = relay 8)
      *
      * @code
      * auto bitmap = ryn4.readBitmapStatus();
      * if (bitmap.isOk()) {
      *     for (int i = 0; i < 8; i++) {
-     *         bool relayOn = (bitmap.value >> i) & 0x01;
+     *         bool relayOn = (bitmap.value() >> i) & 0x01;
      *         Serial.printf("Relay %d: %s\n", i+1, relayOn ? "ON" : "OFF");
      *     }
      * }
+     * // Or with cache update for verification:
+     * auto bitmap = ryn4.readBitmapStatus(true);
      * @endcode
      */
-    ryn4::RelayResult<uint16_t> readBitmapStatus();
+    ryn4::RelayResult<uint16_t> readBitmapStatus(bool updateCache = false);
 
     /**
      * @brief Perform software factory reset

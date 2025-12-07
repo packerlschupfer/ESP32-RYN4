@@ -425,14 +425,14 @@ ryn4::RelayErrorCode RYN4::setMultipleRelayStatesVerified(const std::array<bool,
     
     // Small delay for relays to physically change state
     vTaskDelay(pdMS_TO_TICKS(30)); // Reduced from 100ms to 30ms
-    
-    // Clear the RELAY_CONFIG bit before reading
-    xEventGroupClearBits(xInitEventGroup, InitBits::RELAY_CONFIG);
-    
-    // Read back all relay states
-    if (readAllRelayStatus() != RelayErrorCode::SUCCESS) {
-        RYN4_LOG_E("Failed to read relay status for verification");
-        
+
+    // Read back all relay states using bitmap (faster: 2 bytes vs 16 bytes)
+    // updateCache=true updates internal state and sets RELAY_CONFIG bit
+    auto bitmapResult = readBitmapStatus(true);
+
+    if (bitmapResult.isError()) {
+        RYN4_LOG_E("Failed to read relay status bitmap for verification");
+
         // Mark all states as unconfirmed
         if (xSemaphoreTake(instanceMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             for (size_t i = 0; i < NUM_RELAYS; i++) {
@@ -440,76 +440,55 @@ ryn4::RelayErrorCode RYN4::setMultipleRelayStatesVerified(const std::array<bool,
             }
             xSemaphoreGive(instanceMutex);
         }
-        
+
         RYN4_TIME_END("Multi relay set verified (read failed)");
         return RelayErrorCode::MODBUS_ERROR;
     }
-    
-    // Wait for the read response to be processed
-    EventBits_t bits = xEventGroupWaitBits(
-        xInitEventGroup,
-        InitBits::RELAY_CONFIG,
-        pdFALSE,    // Don't clear on exit
-        pdTRUE,     // Wait for all bits
-        pdMS_TO_TICKS(500)  // 500ms timeout
-    );
-    
-    if ((bits & InitBits::RELAY_CONFIG) == 0) {
-        RYN4_LOG_W("Timeout waiting for relay status verification response");
-        
-        // Mark all states as unconfirmed
-        if (xSemaphoreTake(instanceMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            for (size_t i = 0; i < NUM_RELAYS; i++) {
-                relays[i].setStateConfirmed(false);
-            }
-            xSemaphoreGive(instanceMutex);
-        }
-        
-        RYN4_TIME_END("Multi relay set verified (timeout)");
-        return RelayErrorCode::TIMEOUT;
-    }
-    
+
+    uint16_t bitmap = bitmapResult.value();
+
     // Verify all states match what we commanded
-    if (xSemaphoreTake(instanceMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        bool allMatch = true;
-        int mismatchCount = 0;
-        EventBits_t errorBits = 0;
-        
-        RYN4_LOG_D("Verifying relay states:");
-        
-        for (size_t i = 0; i < NUM_RELAYS; i++) {
-            auto& relay = relays[i];
-            bool expectedState = states[i];
-            
-            if (relay.isOn() == expectedState) {
-                relay.setStateConfirmed(true);
-                RYN4_LOG_D("  Relay %d: verified %s ✓", 
-                                 i + 1, relay.isOn() ? "ON" : "OFF");
-            } else {
-                relay.setStateConfirmed(false);
-                allMatch = false;
-                mismatchCount++;
-                errorBits |= RELAY_ERROR_BITS[i];
-                
-                RYN4_LOG_E("  Relay %d: verification FAILED - commanded %s, actual %s ✗",
-                                 i + 1, expectedState ? "ON" : "OFF", 
-                                 relay.isOn() ? "ON" : "OFF");
-            }
-        }
-        
-        xSemaphoreGive(instanceMutex);
-        
-        if (!allMatch) {
-            // Set error bits for mismatched relays
-            setErrorEventBits(errorBits);
-            
-            RYN4_LOG_E("Relay verification failed: %d of %d relays did not reach expected state",
-                             mismatchCount, NUM_RELAYS);
-            result = RelayErrorCode::UNKNOWN_ERROR;
+    // Note: readBitmapStatus(true) already updated the cache, but we verify against bitmap directly
+    bool allMatch = true;
+    int mismatchCount = 0;
+    EventBits_t errorBits = 0;
+
+    RYN4_LOG_D("Verifying relay states (bitmap: 0x%04X):", bitmap);
+
+    for (size_t i = 0; i < NUM_RELAYS; i++) {
+        bool expectedState = states[i];
+        bool actualState = (bitmap >> i) & 0x01;
+
+        if (actualState == expectedState) {
+            RYN4_LOG_D("  Relay %d: verified %s ✓",
+                             i + 1, actualState ? "ON" : "OFF");
         } else {
-            RYN4_LOG_I("All %d relays verified successfully", NUM_RELAYS);
-            result = RelayErrorCode::SUCCESS;
+            allMatch = false;
+            mismatchCount++;
+            errorBits |= RELAY_ERROR_BITS[i];
+
+            // Mark this relay as unconfirmed
+            if (xSemaphoreTake(instanceMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                relays[i].setStateConfirmed(false);
+                xSemaphoreGive(instanceMutex);
+            }
+
+            RYN4_LOG_E("  Relay %d: verification FAILED - commanded %s, actual %s ✗",
+                             i + 1, expectedState ? "ON" : "OFF",
+                             actualState ? "ON" : "OFF");
         }
+    }
+
+    if (!allMatch) {
+        // Set error bits for mismatched relays
+        setErrorEventBits(errorBits);
+
+        RYN4_LOG_E("Relay verification failed: %d of %d relays did not reach expected state",
+                         mismatchCount, NUM_RELAYS);
+        result = RelayErrorCode::UNKNOWN_ERROR;
+    } else {
+        RYN4_LOG_I("All %d relays verified successfully", NUM_RELAYS);
+        result = RelayErrorCode::SUCCESS;
     }
     
     RYN4_TIME_END("Multi relay set verified");

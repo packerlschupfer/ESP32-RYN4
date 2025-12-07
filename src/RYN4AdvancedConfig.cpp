@@ -103,9 +103,11 @@ ryn4::RelayResult<bool> RYN4::verifyHardwareConfig() {
 
 /**
  * @brief Read all relay states as a bitmap
+ *
+ * @param updateCache If true, updates internal relay state cache and sets event bits
  */
-ryn4::RelayResult<uint16_t> RYN4::readBitmapStatus() {
-    RYN4_LOG_D(tag, "Reading relay status bitmap...");
+ryn4::RelayResult<uint16_t> RYN4::readBitmapStatus(bool updateCache) {
+    RYN4_LOG_D(tag, "Reading relay status bitmap%s...", updateCache ? " (updating cache)" : "");
 
     auto bitmapResult = readHoldingRegisters(ryn4::hardware::REG_STATUS_BITMAP, 1);
 
@@ -116,6 +118,30 @@ ryn4::RelayResult<uint16_t> RYN4::readBitmapStatus() {
 
     uint16_t bitmap = bitmapResult.value()[0];
     RYN4_LOG_D(tag, "Status bitmap: 0x%04X", bitmap);
+
+    // Update internal state cache if requested (for verification)
+    if (updateCache) {
+        MutexGuard lock(instanceMutex, mutexTimeout);
+        if (lock) {
+            for (int i = 0; i < NUM_RELAYS; i++) {
+                bool state = (bitmap >> i) & 0x01;
+                bool previousState = relays[i].isOn();
+
+                relays[i].setOn(state);
+                relays[i].setStateConfirmed(true);
+                relays[i].lastUpdateTime = xTaskGetTickCount();
+
+                if (previousState != state) {
+                    setUpdateEventBits(ryn4::RELAY_UPDATE_BITS[i]);
+                    RYN4_LOG_I(tag, "Relay %d state: %s", i + 1, state ? "ON" : "OFF");
+                }
+            }
+            // Signal that relay config/status has been read successfully
+            setInitializationBit(InitBits::RELAY_CONFIG);
+        } else {
+            RYN4_LOG_E(tag, "Failed to acquire mutex for cache update");
+        }
+    }
 
     // Log individual relay states if debug enabled
 #ifdef RYN4_DEBUG
