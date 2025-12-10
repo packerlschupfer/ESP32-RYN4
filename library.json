@@ -1,0 +1,58 @@
+{
+  "name": "ESP32-RYN4",
+  "version": "0.1.0",
+  "description": "ESP32 driver for RYN404E/RYN408F relay modules via Modbus RTU with multi-command atomic operations, verified control, and comprehensive hardware diagnostics",
+  "keywords": [
+    "modbus",
+    "relay",
+    "ryn4",
+    "ryn404e",
+    "ryn408f",
+    "esp32",
+    "industrial",
+    "automation",
+    "control"
+  ],
+  "authors": [
+    {
+      "name": "packerlschupfer",
+      "email": "packerlschupfer@noreply.github.com",
+      "maintainer": true
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/packerlschupfer/ESP32-RYN4.git"
+  },
+  "homepage": "https://github.com/packerlschupfer/ESP32-RYN4",
+  "license": "MIT",
+  "frameworks": [
+    "arduino",
+    "espidf"
+  ],
+  "platforms": [
+    "espressif32"
+  ],
+  "dependencies": {
+    "ESP32-ModbusDevice": "https://github.com/packerlschupfer/ESP32-ModbusDevice.git",
+    "ESP32-MutexGuard": "https://github.com/packerlschupfer/ESP32-MutexGuard.git",
+    "ESP32-LibraryCommon": "https://github.com/packerlschupfer/ESP32-LibraryCommon.git"
+  },
+  "headers": "RYN4.h",
+  "srcFilter": [
+    "+<RYN4.cpp>",
+    "+<RYN4Events.cpp>",
+    "+<RYN4State.cpp>",
+    "+<RYN4Config.cpp>",
+    "+<RYN4Modbus.cpp>",
+    "+<RYN4Device.cpp>",
+    "+<RYN4Control.cpp>",
+    "+<RYN4AdvancedConfig.cpp>",
+    "+<RYN4MultiCommand.cpp>"
+  ],
+  "build": {
+    "flags": [
+      "-I$PROJECT_DIR/include"
+    ]
+  }
+}
