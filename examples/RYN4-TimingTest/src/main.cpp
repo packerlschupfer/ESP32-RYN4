@@ -28,7 +28,8 @@
 #include <Watchdog.h>
 #ifdef USE_CUSTOM_LOGGER
     #include <Logger.h>
-    #include <LogInterfaceImpl.cpp>  // Include implementation, not header
+    // NOTE: LogInterfaceImpl.cpp is compiled by the ESP32-Logger library itself;
+    // do NOT #include the .cpp here (it would double-define its symbols).
     #include <ConsoleBackend.h>
 #endif
 
